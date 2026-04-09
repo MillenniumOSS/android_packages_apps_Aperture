@@ -9,6 +9,7 @@ import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
 import android.os.Build
 import androidx.camera.camera2.interop.CaptureRequestOptions
+import androidx.core.util.toRange
 import org.lineageos.aperture.models.ColorCorrectionAberrationMode
 import org.lineageos.aperture.models.DistortionCorrectionMode
 import org.lineageos.aperture.models.EdgeMode
@@ -17,6 +18,18 @@ import org.lineageos.aperture.models.HotPixelMode
 import org.lineageos.aperture.models.NoiseReductionMode
 import org.lineageos.aperture.models.ShadingMode
 import org.lineageos.aperture.models.VideoStabilizationMode
+
+private val FPS60_MTK_KEY_SESSION_PARAMETER = CaptureRequest.Key<Int>(
+    "com.mediatek.streamingfeature.hfpsMode", Int::class.java
+)
+
+private val EIS_MTK_KEY_SESSION_PARAMETER = CaptureRequest.Key<Int>(
+    "com.mediatek.eisfeature.eismode", Int::class.java
+)
+
+private val EIS_PREVIEW_MTK_KEY_SESSION_PARAMETER = CaptureRequest.Key<Int>(
+    "com.mediatek.eisfeature.previeweis", Int::class.java
+)
 
 @androidx.camera.camera2.interop.ExperimentalCamera2Interop
 fun <ValueT> CaptureRequestOptions.Builder.setOrClearCaptureRequestOption(
@@ -29,12 +42,23 @@ fun <ValueT> CaptureRequestOptions.Builder.setOrClearCaptureRequestOption(
 @androidx.camera.camera2.interop.ExperimentalCamera2Interop
 fun CaptureRequestOptions.Builder.setFrameRate(
     frameRate: FrameRate?
-) = setOrClearCaptureRequestOption(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, frameRate?.range)
+) = apply {
+    setOrClearCaptureRequestOption(
+    CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+    frameRate?.range?.toRange(),
+)
+
+    // Enable MediaTek HFPS mode if needed
+    if (frameRate == FrameRate.FPS_60) {
+        setOrClearCaptureRequestOption(FPS60_MTK_KEY_SESSION_PARAMETER, 1)
+    }
+}
 
 @androidx.camera.camera2.interop.ExperimentalCamera2Interop
 fun CaptureRequestOptions.Builder.setVideoStabilizationMode(
     videoStabilizationMode: VideoStabilizationMode?
-) = setOrClearCaptureRequestOption(
+) = apply {
+    setOrClearCaptureRequestOption(
     CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
     when (videoStabilizationMode) {
         VideoStabilizationMode.OFF -> CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF
@@ -49,6 +73,18 @@ fun CaptureRequestOptions.Builder.setVideoStabilizationMode(
         null -> null
     }
 )
+    // Enable MediaTek EIS mode and EIS preview mode if needed
+    setOrClearCaptureRequestOption(EIS_MTK_KEY_SESSION_PARAMETER, when (videoStabilizationMode) {
+        VideoStabilizationMode.OFF -> 0
+        VideoStabilizationMode.ON, VideoStabilizationMode.ON_PREVIEW -> 1
+        null -> null
+    })
+    setOrClearCaptureRequestOption(EIS_PREVIEW_MTK_KEY_SESSION_PARAMETER, when (videoStabilizationMode) {
+        VideoStabilizationMode.OFF, VideoStabilizationMode.ON -> 0
+        VideoStabilizationMode.ON_PREVIEW -> 1
+        null -> null
+    })
+}
 
 @androidx.camera.camera2.interop.ExperimentalCamera2Interop
 fun CaptureRequestOptions.Builder.setEdgeMode(
